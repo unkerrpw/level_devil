@@ -1,0 +1,90 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  export-android:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - run: sdkmanager "build-tools;33.0.2" "platforms;android-33"
+
+      - name: Keystore
+        run: |
+          mkdir -p $HOME/.android
+          keytool -genkey -v -keystore $HOME/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Debug,O=Debug,C=US"
+
+      - name: Godot
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.2.2-stable/Godot_v4.2.2-stable_linux.x86_64.zip
+          unzip -q Godot_v4.2.2-stable_linux.x86_64.zip
+          mv Godot_v4.2.2-stable_linux.x86_64 /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          wget -q https://github.com/godotengine/godot/releases/download/4.2.2-stable/Godot_v4.2.2-stable_export_templates.tpz
+          unzip -q Godot_v4.2.2-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.2.2.stable
+          mv templates/* ~/.local/share/godot/export_templates/4.2.2.stable/
+
+      - name: Config
+        run: |
+          python3 -c "
+          import os
+          java = os.path.dirname(os.path.dirname(os.path.realpath(os.popen('which java').read().strip())))
+          sdk = os.environ.get('ANDROID_SDK_ROOT', '/usr/local/lib/android/sdk')
+          home = os.environ['HOME']
+          ks = home + '/.android/debug.keystore'
+          os.makedirs(home + '/.config/godot', exist_ok=True)
+          open(home + '/.config/godot/editor_settings-4.tres', 'w').write('''[gd_resource type=\"EditorSettings\" format=3]
+
+          [resource]
+          export/android/java_sdk_path = \"''' + java + '''\"
+          export/android/android_sdk_path = \"''' + sdk + '''\"
+          export/android/debug_keystore = \"''' + ks + '''\"
+          export/android/debug_keystore_user = \"androiddebugkey\"
+          export/android/debug_keystore_pass = \"android\"
+          ''')
+          open('export_presets.cfg', 'w').write('''[preset.0]
+          name=\"Android\"
+          platform=\"Android\"
+          runnable=true
+          export_filter=\"all_resources\"
+          include_filter=\"\"
+          exclude_filter=\"\"
+          export_path=\"build/LevelDevil.apk\"
+
+          [preset.0.options]
+          package/unique_name=\"com.unkerrpw.leveldevil\"
+          package/name=\"Level Devil\"
+          package/signed=false
+          architectures/arm64-v8a=true
+          architectures/armeabi-v7a=true
+          keystore/debug=\"''' + ks + '''\"
+          keystore/debug_user=\"androiddebugkey\"
+          keystore/debug_password=\"android\"
+          screen/immersive_mode=true
+          ''')
+          print('Done')
+          "
+
+      - name: Build
+        run: |
+          mkdir -p build
+          godot --headless --export-debug "Android" build/LevelDevil.apk
+          ls -la build/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LevelDevil-APK
+          path: build/LevelDevil.apk
+          retention-days: 30

@@ -1,0 +1,17 @@
+# Godot 4 specific ignores
+.godot/
+*.translation
+export_presets.cfg
+
+# Build output
+build/
+*.apk
+*.aab
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
